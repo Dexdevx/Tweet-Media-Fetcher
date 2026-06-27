@@ -1,6 +1,6 @@
-# [Project name]
+# X Media Downloader
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Paste an X/Twitter post URL and instantly get downloadable video qualities and images from that post.
 
 ## Run & Operate
 
@@ -22,15 +22,20 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- Frontend: `artifacts/media-downloader/` (React + Vite, single page at `src/pages/home.tsx`)
+- API contract: `lib/api-spec/openapi.yaml` (source of truth — re-run codegen after edits)
+- Extract route: `artifacts/api-server/src/routes/extract.ts`
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The `/api/extract` endpoint proxies the public `tweeterdownloader.com` extraction API server-side to avoid browser CORS and to normalize/validate the response.
+- Input is restricted to X/Twitter post URLs (host allowlist + `/status/{id}` path check); malformed or non-tweet URLs return 400.
+- Upstream JSON is strictly validated; unexpected shapes or empty media return 502 rather than a misleading 200.
+- Outbound fetch has a 20s timeout via AbortController.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Single-purpose tool: paste an X/Twitter post link, extract downloadable media. Shows post title, thumbnail, duration, and one download link per video quality plus any images.
 
 ## User preferences
 

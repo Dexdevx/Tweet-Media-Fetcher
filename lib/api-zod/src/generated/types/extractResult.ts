@@ -5,16 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface HealthStatus {
-  status: string;
-}
-
-export interface MediaItem {
-  url: string;
-  /** @nullable */
-  quality?: string | null;
-  type: string;
-}
+import type { MediaItem } from './mediaItem';
 
 export interface ExtractResult {
   title: string;
@@ -27,15 +18,3 @@ export interface ExtractResult {
   media: MediaItem[];
   images: string[];
 }
-
-export interface ErrorResponse {
-  error: string;
-}
-
-export type ExtractMediaParams = {
-/**
- * The X/Twitter post URL to extract media from.
- */
-url: string;
-};
-

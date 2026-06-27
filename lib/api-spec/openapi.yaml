@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: extract
+    description: Tweet media extraction operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /extract:
+    get:
+      operationId: extractMedia
+      tags: [extract]
+      summary: Extract media from a tweet
+      description: Extracts downloadable media (videos/images) from an X/Twitter post URL.
+      parameters:
+        - name: url
+          in: query
+          required: true
+          description: The X/Twitter post URL to extract media from.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Extracted media
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Upstream extraction failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +67,45 @@ components:
           type: string
       required:
         - status
-
+    MediaItem:
+      type: object
+      required:
+        - url
+        - type
+      properties:
+        url:
+          type: string
+        quality:
+          type: ["string", "null"]
+        type:
+          type: string
+    ExtractResult:
+      type: object
+      required:
+        - title
+        - media
+        - images
+      properties:
+        title:
+          type: string
+        source:
+          type: ["string", "null"]
+        duration:
+          type: ["number", "null"]
+        thumbnail:
+          type: ["string", "null"]
+        media:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaItem"
+        images:
+          type: array
+          items:
+            type: string
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
