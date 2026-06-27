@@ -50,7 +50,25 @@ export const RenderCloudinaryBody = zod.object({
 
 export const RenderCloudinaryResponse = zod.object({
   "downloadUrl": zod.string(),
-  "expiresInSeconds": zod.number()
+  "expiresInSeconds": zod.number(),
+  "videoPublicId": zod.string().describe('Cloudinary public ID of the temporary rendered video.'),
+  "overlayPublicId": zod.string().describe('Cloudinary public ID of the temporary overlay image.'),
+  "cleanupToken": zod.string().describe('Signed proof binding these asset IDs to this render. Must be sent back to \/cleanup-cloudinary so the IDs alone can\'t be used to delete someone else\'s assets.\n')
+})
+
+
+/**
+ * Deletes the temporary video + overlay assets created by a cloud render, so the user can free them as soon as they finish downloading instead of waiting for the automatic expiry. Only assets in the temp folder can be deleted.
+ * @summary Immediately delete the temporary Cloudinary assets for a render
+ */
+export const CleanupCloudinaryBody = zod.object({
+  "videoPublicId": zod.string(),
+  "overlayPublicId": zod.string(),
+  "cleanupToken": zod.string()
+})
+
+export const CleanupCloudinaryResponse = zod.object({
+  "deleted": zod.boolean()
 })
 
 

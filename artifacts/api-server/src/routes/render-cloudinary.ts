@@ -1,5 +1,9 @@
 import { Router, type IRouter } from "express";
-import { RenderCloudinaryBody } from "@workspace/api-zod";
+import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
+import {
+  RenderCloudinaryBody,
+  CleanupCloudinaryBody,
+} from "@workspace/api-zod";
 import { validateMediaUrl } from "../lib/twimg";
 import { logger } from "../lib/logger";
 
@@ -28,6 +32,29 @@ function normalizedCloudinaryUrl(): string | null {
   // (`cloudinary://<key>:<secret>@<cloud>`); a real URL never contains < or >.
   raw = raw.replace(/[<>]/g, "");
   return raw.startsWith("cloudinary://") ? raw : null;
+}
+
+// Signed proof that a cleanup request owns the assets it names. We bind both
+// public IDs into an HMAC so possessing the IDs alone is not enough to delete
+// someone else's temporary render. SESSION_SECRET is the signing key; if it is
+// absent we fall back to a per-process random key — fine here because assets
+// (and thus tokens) only live ~5 minutes anyway.
+const CLEANUP_SECRET =
+  process.env["SESSION_SECRET"]?.trim() || randomBytes(32).toString("hex");
+function cleanupToken(videoPublicId: string, overlayPublicId: string): string {
+  return createHmac("sha256", CLEANUP_SECRET)
+    .update(`${videoPublicId}\n${overlayPublicId}`)
+    .digest("hex");
+}
+function verifyCleanupToken(
+  videoPublicId: string,
+  overlayPublicId: string,
+  token: string,
+): boolean {
+  const expected = cleanupToken(videoPublicId, overlayPublicId);
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(token, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 // Validate and decode the browser-rendered overlay: must be a base64 PNG data
@@ -234,7 +261,13 @@ router.post("/render-cloudinary", async (req, res) => {
         );
     }, DELETE_AFTER_MS);
 
-    res.json({ downloadUrl, expiresInSeconds: DELETE_AFTER_MS / 1000 });
+    res.json({
+      downloadUrl,
+      expiresInSeconds: DELETE_AFTER_MS / 1000,
+      videoPublicId,
+      overlayPublicId,
+      cleanupToken: cleanupToken(videoPublicId, overlayPublicId),
+    });
   } catch (err) {
     req.log.error({ err }, "Cloudinary render failed");
     // Best-effort cleanup if we failed partway through.
@@ -253,6 +286,64 @@ router.post("/render-cloudinary", async (req, res) => {
         "Cloud rendering failed. Please try again or use device rendering instead.",
     });
   }
+});
+
+// Only allow deleting the temporary assets we created, never arbitrary ones.
+function isTempPublicId(id: string): boolean {
+  return id.startsWith(`${UPLOAD_FOLDER}/`);
+}
+
+router.post("/cleanup-cloudinary", async (req, res) => {
+  const cloudinary = await getCloudinary();
+  if (!cloudinary) {
+    res.status(503).json({ error: "Cloud rendering isn't configured." });
+    return;
+  }
+
+  const parsed = CleanupCloudinaryBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid cleanup request." });
+    return;
+  }
+
+  const { videoPublicId, overlayPublicId, cleanupToken: token } = parsed.data;
+  if (!isTempPublicId(videoPublicId) || !isTempPublicId(overlayPublicId)) {
+    res.status(400).json({ error: "Unknown asset." });
+    return;
+  }
+  // The signed token proves the caller owns these specific assets, so the IDs
+  // alone can't be used to delete another user's render.
+  if (!verifyCleanupToken(videoPublicId, overlayPublicId, token)) {
+    res.status(403).json({ error: "Invalid cleanup token." });
+    return;
+  }
+
+  // Cloudinary's destroy() resolves with { result: "ok" | "not found" | ... }
+  // rather than throwing on a miss, so inspect the result to report truthfully.
+  const destroyed = async (
+    publicId: string,
+    resourceType: "video" | "image",
+  ): Promise<boolean> => {
+    try {
+      const r = (await cloudinary.uploader.destroy(publicId, {
+        resource_type: resourceType,
+        invalidate: true,
+      })) as { result?: string };
+      // "not found" means it's already gone (auto-deleted) — treat as success.
+      return r.result === "ok" || r.result === "not found";
+    } catch (err) {
+      req.log.warn({ err, publicId }, "On-demand cleanup failed");
+      return false;
+    }
+  };
+
+  const [videoOk, overlayOk] = await Promise.all([
+    destroyed(videoPublicId, "video"),
+    destroyed(overlayPublicId, "image"),
+  ]);
+
+  const deleted = videoOk && overlayOk;
+  res.status(deleted ? 200 : 502).json({ deleted });
 });
 
 export default router;

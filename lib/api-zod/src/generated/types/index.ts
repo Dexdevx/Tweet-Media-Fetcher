@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './cleanupCloudinaryRequest';
+export * from './cleanupCloudinaryResult';
 export * from './errorResponse';
 export * from './extractMediaParams';
 export * from './extractResult';

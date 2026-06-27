@@ -9,4 +9,10 @@
 export interface RenderCloudinaryResult {
   downloadUrl: string;
   expiresInSeconds: number;
+  /** Cloudinary public ID of the temporary rendered video. */
+  videoPublicId: string;
+  /** Cloudinary public ID of the temporary overlay image. */
+  overlayPublicId: string;
+  /** Signed proof binding these asset IDs to this render. Must be sent back to /cleanup-cloudinary so the IDs alone can't be used to delete someone else's assets. */
+  cleanupToken: string;
 }

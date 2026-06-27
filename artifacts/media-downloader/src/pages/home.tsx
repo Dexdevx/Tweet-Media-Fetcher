@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Download, AlertCircle, Image as ImageIcon, Video, Clock, ArrowRight, Loader2, PlayCircle } from "lucide-react";
+import { Download, AlertCircle, Image as ImageIcon, Video, Clock, ArrowRight, Loader2, PlayCircle, ClipboardPaste, FilePlus2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { VideoEditor } from "@/components/VideoEditor";
 
@@ -36,6 +36,22 @@ export default function Home() {
     if (!trimmed) return;
     setSelectedVideoUrl("");
     setSubmittedUrl(trimmed);
+  };
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) setInputValue(text.trim());
+    } catch {
+      // Clipboard read can be blocked (permissions / unsupported). The user can
+      // still paste manually with Ctrl/Cmd+V, so fail silently.
+    }
+  };
+
+  const handleNewPost = () => {
+    setInputValue("");
+    setSubmittedUrl("");
+    setSelectedVideoUrl("");
   };
 
   const isWorking = isLoading || isFetching;
@@ -73,11 +89,23 @@ export default function Home() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="https://x.com/username/status/123456789"
-                className="w-full h-14 pl-5 pr-4 text-base md:text-lg border-transparent bg-muted/50 focus-visible:bg-background focus-visible:ring-primary rounded-xl"
+                className="w-full h-14 pl-5 pr-[6.5rem] text-base md:text-lg border-transparent bg-muted/50 focus-visible:bg-background focus-visible:ring-primary rounded-xl"
                 disabled={isWorking}
                 required
                 data-testid="input-url"
               />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handlePaste}
+                disabled={isWorking}
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-9 rounded-lg px-3 text-muted-foreground hover:text-foreground"
+                data-testid="button-paste"
+              >
+                <ClipboardPaste className="w-4 h-4 mr-1.5" />
+                Paste
+              </Button>
             </div>
             <Button
               type="submit"
@@ -138,6 +166,17 @@ export default function Home() {
         {/* Success State */}
         {data && !isWorking && !isError && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                onClick={handleNewPost}
+                className="rounded-xl font-semibold"
+                data-testid="button-new-post"
+              >
+                <FilePlus2 className="w-4 h-4 mr-2" />
+                New Post
+              </Button>
+            </div>
             <Card className="overflow-hidden border shadow-sm rounded-2xl">
               <div className="flex flex-col sm:flex-row">
                 {/* Thumbnail */}

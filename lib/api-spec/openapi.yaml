@@ -100,6 +100,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /cleanup-cloudinary:
+    post:
+      operationId: cleanupCloudinary
+      tags: [render]
+      summary: Immediately delete the temporary Cloudinary assets for a render
+      description: >
+        Deletes the temporary video + overlay assets created by a cloud render,
+        so the user can free them as soon as they finish downloading instead of
+        waiting for the automatic expiry. Only assets in the temp folder can be
+        deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanupCloudinaryRequest"
+      responses:
+        "200":
+          description: Assets deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanupCloudinaryResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Cloud rendering is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -163,11 +198,46 @@ components:
       required:
         - downloadUrl
         - expiresInSeconds
+        - videoPublicId
+        - overlayPublicId
+        - cleanupToken
       properties:
         downloadUrl:
           type: string
         expiresInSeconds:
           type: number
+        videoPublicId:
+          type: string
+          description: Cloudinary public ID of the temporary rendered video.
+        overlayPublicId:
+          type: string
+          description: Cloudinary public ID of the temporary overlay image.
+        cleanupToken:
+          type: string
+          description: >
+            Signed proof binding these asset IDs to this render. Must be sent back
+            to /cleanup-cloudinary so the IDs alone can't be used to delete
+            someone else's assets.
+    CleanupCloudinaryRequest:
+      type: object
+      required:
+        - videoPublicId
+        - overlayPublicId
+        - cleanupToken
+      properties:
+        videoPublicId:
+          type: string
+        overlayPublicId:
+          type: string
+        cleanupToken:
+          type: string
+    CleanupCloudinaryResult:
+      type: object
+      required:
+        - deleted
+      properties:
+        deleted:
+          type: boolean
     ErrorResponse:
       type: object
       required:

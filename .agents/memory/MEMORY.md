@@ -2,3 +2,4 @@
 - [FFmpeg.wasm in Vite](ffmpeg-wasm-vite.md) — 0.12.x module worker needs the ESM core (not UMD); also Vite optimizeDeps.exclude + single-threaded core for coi=false.
 - [Cloudinary CLOUDINARY_URL boot crash](cloudinary-env-crash.md) — SDK parses the env var at import time and crashes the server on a bad value; import lazily + sanitize (strip `CLOUDINARY_URL=`, quotes, `<>`).
 - [Cloudinary text overlays fail on emoji](cloudinary-text-overlay.md) — l_text 400s "Invalid encoding" on emoji/curly quotes at delivery; burn caption+logo as a client PNG and overlay that instead.
+- [Cloudinary on-demand cleanup](cloudinary-cleanup-token.md) — delete-asset endpoint needs an HMAC token (IDs alone allow cross-user deletes); destroy() returns {result:"not found"} instead of throwing.

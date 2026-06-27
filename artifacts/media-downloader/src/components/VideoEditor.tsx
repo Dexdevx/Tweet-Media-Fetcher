@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRenderCloudinary } from "@workspace/api-client-react";
+import {
+  useRenderCloudinary,
+  useCleanupCloudinary,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
@@ -17,6 +20,8 @@ import {
   X,
   Smartphone,
   Cloud,
+  Trash2,
+  CheckCircle2,
 } from "lucide-react";
 import {
   DEFAULT_OVERLAY,
@@ -111,6 +116,12 @@ export function VideoEditor({
   const [renderProgress, setRenderProgress] = useState(0);
   const [renderStage, setRenderStage] = useState("");
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [cloudAssets, setCloudAssets] = useState<{
+    videoPublicId: string;
+    overlayPublicId: string;
+    cleanupToken: string;
+  } | null>(null);
+  const [cloudDeleted, setCloudDeleted] = useState(false);
 
   const frameRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -119,6 +130,7 @@ export function VideoEditor({
   const dragRef = useRef<DragState | null>(null);
 
   const cloudRender = useRenderCloudinary();
+  const cloudCleanup = useCleanupCloudinary();
 
   useEffect(() => {
     setOverlay((prev) => ({ ...prev, text: title }));
@@ -148,6 +160,8 @@ export function VideoEditor({
     setVideoError(null);
     setVideoSrc(null);
     videoBlobRef.current = null;
+    setCloudAssets(null);
+    setCloudDeleted(false);
 
     (async () => {
       try {
@@ -328,6 +342,12 @@ export function VideoEditor({
         },
       });
       setRenderStage("Done");
+      setCloudDeleted(false);
+      setCloudAssets({
+        videoPublicId: result.videoPublicId,
+        overlayPublicId: result.overlayPublicId,
+        cleanupToken: result.cleanupToken,
+      });
       triggerDownload(result.downloadUrl, "x-media-caption.mp4");
     } catch (err) {
       const status = (err as { status?: number })?.status;
@@ -350,6 +370,20 @@ export function VideoEditor({
   const handleRender = () => {
     if (renderMode === "cloud") return handleCloudRender();
     return handleDeviceRender();
+  };
+
+  const handleDeleteCloudAssets = async () => {
+    if (!cloudAssets) return;
+    try {
+      await cloudCleanup.mutateAsync({ data: cloudAssets });
+      setCloudDeleted(true);
+      setCloudAssets(null);
+    } catch {
+      // The asset auto-expires anyway; surface a soft failure only.
+      setRenderError(
+        "Couldn't delete the cloud copy now — it will auto-delete shortly.",
+      );
+    }
   };
 
   const displayedText = transformCase(overlay.text, overlay.caseMode);
@@ -693,6 +727,48 @@ export function VideoEditor({
         {renderError && (
           <p className="text-sm text-red-500" data-testid="render-error">
             {renderError}
+          </p>
+        )}
+
+        {cloudAssets && !rendering && (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 p-3"
+            data-testid="cloud-cleanup"
+          >
+            <p className="text-xs text-muted-foreground">
+              Your video downloaded from the cloud. It auto-deletes in a few
+              minutes — or remove it now.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDeleteCloudAssets}
+              disabled={cloudCleanup.isPending}
+              className="rounded-lg"
+              data-testid="button-delete-cloud"
+            >
+              {cloudCleanup.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete from cloud
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {cloudDeleted && (
+          <p
+            className="flex items-center gap-2 text-sm text-green-600"
+            data-testid="cloud-deleted"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Removed from the cloud.
           </p>
         )}
 

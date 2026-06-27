@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CleanupCloudinaryRequest,
+  CleanupCloudinaryResult,
   ErrorResponse,
   ExtractMediaParams,
   ExtractResult,
@@ -287,5 +289,76 @@ export const useRenderCloudinary = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getRenderCloudinaryMutationOptions(options));
+    }
+
+export const getCleanupCloudinaryUrl = () => {
+
+
+
+
+  return `/api/cleanup-cloudinary`
+}
+
+/**
+ * Deletes the temporary video + overlay assets created by a cloud render, so the user can free them as soon as they finish downloading instead of waiting for the automatic expiry. Only assets in the temp folder can be deleted.
+ * @summary Immediately delete the temporary Cloudinary assets for a render
+ */
+export const cleanupCloudinary = async (cleanupCloudinaryRequest: CleanupCloudinaryRequest, options?: RequestInit): Promise<CleanupCloudinaryResult> => {
+
+  return customFetch<CleanupCloudinaryResult>(getCleanupCloudinaryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cleanupCloudinaryRequest)
+  }
+);}
+
+
+
+
+export const getCleanupCloudinaryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cleanupCloudinary>>, TError,{data: BodyType<CleanupCloudinaryRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cleanupCloudinary>>, TError,{data: BodyType<CleanupCloudinaryRequest>}, TContext> => {
+
+const mutationKey = ['cleanupCloudinary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cleanupCloudinary>>, {data: BodyType<CleanupCloudinaryRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  cleanupCloudinary(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CleanupCloudinaryMutationResult = NonNullable<Awaited<ReturnType<typeof cleanupCloudinary>>>
+    export type CleanupCloudinaryMutationBody = BodyType<CleanupCloudinaryRequest>
+    export type CleanupCloudinaryMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Immediately delete the temporary Cloudinary assets for a render
+ */
+export const useCleanupCloudinary = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cleanupCloudinary>>, TError,{data: BodyType<CleanupCloudinaryRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cleanupCloudinary>>,
+        TError,
+        {data: BodyType<CleanupCloudinaryRequest>},
+        TContext
+      > => {
+      return useMutation(getCleanupCloudinaryMutationOptions(options));
     }
 
