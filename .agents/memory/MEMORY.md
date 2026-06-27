@@ -1,1 +1,2 @@
 - [Radix Dialog Escape interception](radix-dialog-escape.md) — a child can't cancel Dialog's Escape-close via React stopPropagation; gate DialogContent's onEscapeKeyDown with a ref.
+- [FFmpeg.wasm in Vite](ffmpeg-wasm-vite.md) — 0.12.x module worker needs the ESM core (not UMD); also Vite optimizeDeps.exclude + single-threaded core for coi=false.

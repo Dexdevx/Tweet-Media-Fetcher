@@ -54,6 +54,12 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
+  // @ffmpeg/ffmpeg spins up an internal Web Worker; Vite's dep optimizer
+  // rewrites the worker path and breaks it ("worker.js does not exist in
+  // .vite/deps"). Excluding the packages keeps the worker resolvable.
+  optimizeDeps: {
+    exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
+  },
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,

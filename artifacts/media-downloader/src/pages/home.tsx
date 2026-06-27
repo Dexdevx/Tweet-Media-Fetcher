@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Download, AlertCircle, Image as ImageIcon, Video, Clock, ArrowRight, Loader2, PlayCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { VideoPlayerOverlay } from "@/components/VideoPlayerOverlay";
+import { VideoEditor } from "@/components/VideoEditor";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -17,7 +17,6 @@ function formatDuration(seconds: number): string {
 export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [submittedUrl, setSubmittedUrl] = useState("");
-  const [playerOpen, setPlayerOpen] = useState(false);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState("");
 
   const { data, isLoading, isError, error, isFetching } = useExtractMedia(
@@ -35,6 +34,7 @@ export default function Home() {
     e.preventDefault();
     const trimmed = inputValue.trim();
     if (!trimmed) return;
+    setSelectedVideoUrl("");
     setSubmittedUrl(trimmed);
   };
 
@@ -186,13 +186,10 @@ export default function Home() {
                           {sortedVideos.map((media, idx) => (
                             <Button
                               key={idx}
-                              variant={idx === 0 ? "default" : "secondary"}
+                              variant={media.url === selectedVideoUrl ? "default" : "secondary"}
                               className="rounded-xl font-semibold"
                               data-testid={`link-download-video-${idx}`}
-                              onClick={() => {
-                                setSelectedVideoUrl(media.url);
-                                setPlayerOpen(true);
-                              }}
+                              onClick={() => setSelectedVideoUrl(media.url)}
                             >
                               <PlayCircle className="w-4 h-4 mr-2" />
                               {media.quality ? `${media.quality} ${media.type.toUpperCase()}` : media.type.toUpperCase()}
@@ -231,20 +228,30 @@ export default function Home() {
                 </div>
               </div>
             </Card>
+
+            {/* Inline Caption Editor */}
+            {selectedVideoUrl && (
+              <Card className="overflow-hidden border shadow-sm rounded-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <CardContent className="p-5 sm:p-6">
+                  <h3 className="font-semibold text-lg mb-1 flex items-center gap-2">
+                    <Video className="w-5 h-5 text-primary" />
+                    Caption Editor
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-5">
+                    Drag the caption to position it, resize with the corner handle, then render a TikTok-style 9:16 video.
+                  </p>
+                  <VideoEditor
+                    title={data.title || ""}
+                    selectedUrl={selectedVideoUrl}
+                    mediaOptions={sortedVideos}
+                    onSelectQuality={(url) => setSelectedVideoUrl(url)}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </div>
-
-      {data && (
-        <VideoPlayerOverlay
-          isOpen={playerOpen}
-          onClose={() => setPlayerOpen(false)}
-          title={data.title || ""}
-          selectedUrl={selectedVideoUrl}
-          mediaOptions={sortedVideos}
-          onSelectQuality={(url) => setSelectedVideoUrl(url)}
-        />
-      )}
     </div>
   );
 }
