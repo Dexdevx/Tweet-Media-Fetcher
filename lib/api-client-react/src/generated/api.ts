@@ -6,11 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
@@ -19,11 +23,13 @@ import type {
   ErrorResponse,
   ExtractMediaParams,
   ExtractResult,
-  HealthStatus
+  HealthStatus,
+  RenderCloudinaryRequest,
+  RenderCloudinaryResult
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
-import type { ErrorType } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -211,4 +217,75 @@ export function useExtractMedia<TData = Awaited<ReturnType<typeof extractMedia>>
 
 
 
+
+export const getRenderCloudinaryUrl = () => {
+
+
+
+
+  return `/api/render-cloudinary`
+}
+
+/**
+ * Renders the selected video into a 9:16 vertical MP4 with the caption text and optional logo burned in, using Cloudinary's CDN. Returns a temporary download URL; the uploaded assets are deleted after a few minutes.
+ * @summary Render a captioned 9:16 video on Cloudinary
+ */
+export const renderCloudinary = async (renderCloudinaryRequest: RenderCloudinaryRequest, options?: RequestInit): Promise<RenderCloudinaryResult> => {
+
+  return customFetch<RenderCloudinaryResult>(getRenderCloudinaryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(renderCloudinaryRequest)
+  }
+);}
+
+
+
+
+export const getRenderCloudinaryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renderCloudinary>>, TError,{data: BodyType<RenderCloudinaryRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof renderCloudinary>>, TError,{data: BodyType<RenderCloudinaryRequest>}, TContext> => {
+
+const mutationKey = ['renderCloudinary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof renderCloudinary>>, {data: BodyType<RenderCloudinaryRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  renderCloudinary(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RenderCloudinaryMutationResult = NonNullable<Awaited<ReturnType<typeof renderCloudinary>>>
+    export type RenderCloudinaryMutationBody = BodyType<RenderCloudinaryRequest>
+    export type RenderCloudinaryMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Render a captioned 9:16 video on Cloudinary
+ */
+export const useRenderCloudinary = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renderCloudinary>>, TError,{data: BodyType<RenderCloudinaryRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof renderCloudinary>>,
+        TError,
+        {data: BodyType<RenderCloudinaryRequest>},
+        TContext
+      > => {
+      return useMutation(getRenderCloudinaryMutationOptions(options));
+    }
 

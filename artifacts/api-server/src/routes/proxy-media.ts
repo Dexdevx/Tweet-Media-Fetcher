@@ -1,34 +1,16 @@
 import { Router, type IRouter } from "express";
 import { Readable } from "node:stream";
+import { validateMediaUrl } from "../lib/twimg";
 
 const router: IRouter = Router();
 
-const ALLOWED_HOSTS = new Set([
-  "video.twimg.com",
-  "video-ft.twimg.com",
-  "pbs.twimg.com",
-]);
-
 router.get("/proxy-media", async (req, res) => {
-  const rawUrl = req.query["url"];
-
-  if (typeof rawUrl !== "string" || rawUrl.length === 0) {
-    res.status(400).json({ error: "A 'url' query parameter is required." });
+  const validated = validateMediaUrl(req.query["url"]);
+  if (!validated.ok || !validated.url) {
+    res.status(400).json({ error: validated.error ?? "Invalid media URL." });
     return;
   }
-
-  let target: URL;
-  try {
-    target = new URL(rawUrl);
-  } catch {
-    res.status(400).json({ error: "Invalid media URL." });
-    return;
-  }
-
-  if (target.protocol !== "https:" || !ALLOWED_HOSTS.has(target.hostname)) {
-    res.status(400).json({ error: "Media host is not allowed." });
-    return;
-  }
+  const target = validated.url;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60000);

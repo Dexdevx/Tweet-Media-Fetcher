@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRenderCloudinary } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
@@ -12,12 +13,18 @@ import {
   Loader2,
   Sparkles,
   RotateCcw,
+  ImagePlus,
+  X,
+  Smartphone,
+  Cloud,
 } from "lucide-react";
 import {
   DEFAULT_OVERLAY,
+  DEFAULT_LOGO,
   transformCase,
   type Align,
   type CaseMode,
+  type LogoState,
   type OverlayState,
 } from "@/lib/textOverlay";
 import { renderVideoWithOverlay, preloadFFmpeg } from "@/lib/ffmpeg";
@@ -35,8 +42,29 @@ interface VideoEditorProps {
   onSelectQuality: (url: string) => void;
 }
 
+type RenderMode = "device" | "cloud";
+type DragTarget = "caption" | "logo";
+
 function proxyUrl(rawUrl: string): string {
   return `/api/proxy-media?url=${encodeURIComponent(rawUrl)}`;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Could not read the logo file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function triggerDownload(href: string, filename: string): void {
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 const CASE_OPTIONS: { value: CaseMode; label: string }[] = [
@@ -45,6 +73,15 @@ const CASE_OPTIONS: { value: CaseMode; label: string }[] = [
   { value: "title", label: "Aa" },
   { value: "lower", label: "aa" },
 ];
+
+interface DragState {
+  target: DragTarget;
+  mode: "move" | "resize";
+  startX: number;
+  startY: number;
+  startOverlay: OverlayState;
+  startLogo: LogoState | null;
+}
 
 export function VideoEditor({
   title,
@@ -56,10 +93,13 @@ export function VideoEditor({
     text: title,
     ...DEFAULT_OVERLAY,
   });
+  const [logo, setLogo] = useState<LogoState | null>(null);
+  const [renderMode, setRenderMode] = useState<RenderMode>("device");
+
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
-  const [frameHeight, setFrameHeight] = useState(0);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
 
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
@@ -67,23 +107,25 @@ export function VideoEditor({
   const [renderError, setRenderError] = useState<string | null>(null);
 
   const frameRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const videoBlobRef = useRef<Blob | null>(null);
-  const dragRef = useRef<{
-    mode: "move" | "resize";
-    startX: number;
-    startY: number;
-    start: OverlayState;
-  } | null>(null);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+
+  const cloudRender = useRenderCloudinary();
 
   useEffect(() => {
     setOverlay((prev) => ({ ...prev, text: title }));
   }, [title]);
 
-  // Track frame height so the caption font size scales with the preview.
+  // Track frame size so caption font + logo scale with the preview.
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
-    const update = () => setFrameHeight(frame.getBoundingClientRect().height);
+    const update = () => {
+      const rect = frame.getBoundingClientRect();
+      setFrameSize({ width: rect.width, height: rect.height });
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(frame);
@@ -137,18 +179,44 @@ export function VideoEditor({
     const dx = (e.clientX - drag.startX) / rect.width;
     const dy = (e.clientY - drag.startY) / rect.height;
 
-    setOverlay((prev) => {
+    if (drag.target === "caption") {
+      setOverlay((prev) => {
+        if (drag.mode === "move") {
+          const x = Math.min(
+            Math.max(0, drag.startOverlay.xFrac + dx),
+            1 - prev.wFrac,
+          );
+          const y = Math.min(Math.max(0, drag.startOverlay.yFrac + dy), 0.98);
+          return { ...prev, xFrac: x, yFrac: y };
+        }
+        const w = Math.min(
+          Math.max(0.2, drag.startOverlay.wFrac + dx),
+          1 - prev.xFrac,
+        );
+        const font = Math.min(
+          Math.max(0.02, drag.startOverlay.fontFrac + dy * 0.4),
+          0.16,
+        );
+        return { ...prev, wFrac: w, fontFrac: font };
+      });
+      return;
+    }
+
+    setLogo((prev) => {
+      if (!prev || !drag.startLogo) return prev;
       if (drag.mode === "move") {
-        const x = Math.min(Math.max(0, drag.start.xFrac + dx), 1 - prev.wFrac);
-        const y = Math.min(Math.max(0, drag.start.yFrac + dy), 0.98);
+        const x = Math.min(
+          Math.max(0, drag.startLogo.xFrac + dx),
+          1 - prev.wFrac,
+        );
+        const y = Math.min(Math.max(0, drag.startLogo.yFrac + dy), 0.98);
         return { ...prev, xFrac: x, yFrac: y };
       }
-      const w = Math.min(Math.max(0.2, drag.start.wFrac + dx), 1 - prev.xFrac);
-      const font = Math.min(
-        Math.max(0.02, drag.start.fontFrac + dy * 0.4),
-        0.16,
+      const w = Math.min(
+        Math.max(0.08, drag.startLogo.wFrac + dx),
+        1 - prev.xFrac,
       );
-      return { ...prev, wFrac: w, fontFrac: font };
+      return { ...prev, wFrac: w };
     });
   }, []);
 
@@ -159,24 +227,50 @@ export function VideoEditor({
   }, [onPointerMove]);
 
   const startDrag = useCallback(
-    (mode: "move" | "resize", e: React.PointerEvent) => {
+    (target: DragTarget, mode: "move" | "resize", e: React.PointerEvent) => {
       e.preventDefault();
       e.stopPropagation();
       dragRef.current = {
+        target,
         mode,
         startX: e.clientX,
         startY: e.clientY,
-        start: overlay,
+        startOverlay: overlay,
+        startLogo: logo,
       };
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", endDrag);
     },
-    [overlay, onPointerMove, endDrag],
+    [overlay, logo, onPointerMove, endDrag],
   );
 
   useEffect(() => endDrag, [endDrag]);
 
-  const handleRender = async () => {
+  const handleLogoFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setLogo({ dataUrl, ...DEFAULT_LOGO });
+      setRenderError(null);
+    } catch (err) {
+      setRenderError(
+        err instanceof Error ? err.message : "Could not read the logo file.",
+      );
+    }
+  };
+
+  const removeLogo = () => {
+    setLogo(null);
+    logoImgRef.current = null;
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const captionPayload = (): OverlayState => ({
+    ...overlay,
+    text: transformCase(overlay.text, overlay.caseMode),
+  });
+
+  const handleDeviceRender = async () => {
     if (!videoBlobRef.current) return;
     setRendering(true);
     setRenderError(null);
@@ -185,17 +279,13 @@ export function VideoEditor({
     try {
       const blob = await renderVideoWithOverlay({
         videoBlob: videoBlobRef.current,
-        overlay,
+        overlay: captionPayload(),
+        logo,
         onProgress: (r) => setRenderProgress(r),
         onStage: (s) => setRenderStage(s),
       });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "x-media-caption.mp4";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      triggerDownload(url, "x-media-caption.mp4");
       setTimeout(() => URL.revokeObjectURL(url), 4000);
       setRenderStage("Done");
     } catch (err) {
@@ -209,8 +299,61 @@ export function VideoEditor({
     }
   };
 
+  const handleCloudRender = async () => {
+    setRendering(true);
+    setRenderError(null);
+    setRenderProgress(0);
+    setRenderStage("Uploading to cloud");
+    try {
+      const cap = captionPayload();
+      const result = await cloudRender.mutateAsync({
+        data: {
+          videoUrl: selectedUrl,
+          overlay: {
+            text: cap.text,
+            xFrac: cap.xFrac,
+            yFrac: cap.yFrac,
+            wFrac: cap.wFrac,
+            fontFrac: cap.fontFrac,
+            align: cap.align,
+          },
+          logo: logo
+            ? {
+                dataUrl: logo.dataUrl,
+                xFrac: logo.xFrac,
+                yFrac: logo.yFrac,
+                wFrac: logo.wFrac,
+              }
+            : null,
+        },
+      });
+      setRenderStage("Done");
+      triggerDownload(result.downloadUrl, "x-media-caption.mp4");
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      if (status === 503) {
+        setRenderError(
+          "Cloud rendering isn't set up yet. Switch to device rendering or add the Cloudinary key.",
+        );
+      } else {
+        setRenderError(
+          err instanceof Error
+            ? err.message
+            : "Cloud rendering failed. Try device rendering instead.",
+        );
+      }
+    } finally {
+      setRendering(false);
+    }
+  };
+
+  const handleRender = () => {
+    if (renderMode === "cloud") return handleCloudRender();
+    return handleDeviceRender();
+  };
+
   const displayedText = transformCase(overlay.text, overlay.caseMode);
-  const captionFontPx = Math.max(8, overlay.fontFrac * frameHeight);
+  const captionFontPx = Math.max(8, overlay.fontFrac * frameSize.height);
 
   return (
     <div className="grid items-start gap-6 md:grid-cols-[auto_1fr]">
@@ -245,12 +388,41 @@ export function VideoEditor({
             </div>
           )}
 
+          {/* Logo overlay */}
+          {videoSrc && logo && (
+            <div
+              role="button"
+              tabIndex={0}
+              onPointerDown={(e) => startDrag("logo", "move", e)}
+              className="absolute cursor-move touch-none ring-1 ring-white/40"
+              style={{
+                left: `${logo.xFrac * 100}%`,
+                top: `${logo.yFrac * 100}%`,
+                width: `${logo.wFrac * 100}%`,
+              }}
+              data-testid="logo-overlay"
+            >
+              <img
+                ref={logoImgRef}
+                src={logo.dataUrl}
+                alt="Logo overlay"
+                className="pointer-events-none block w-full"
+                draggable={false}
+              />
+              <div
+                onPointerDown={(e) => startDrag("logo", "resize", e)}
+                className="absolute -bottom-2 -right-2 h-5 w-5 cursor-nwse-resize touch-none rounded-full border-2 border-white bg-primary"
+                data-testid="logo-resize"
+              />
+            </div>
+          )}
+
           {/* Caption overlay */}
           {videoSrc && displayedText.trim() && (
             <div
               role="button"
               tabIndex={0}
-              onPointerDown={(e) => startDrag("move", e)}
+              onPointerDown={(e) => startDrag("caption", "move", e)}
               className="absolute cursor-move touch-none"
               style={{
                 left: `${overlay.xFrac * 100}%`,
@@ -271,7 +443,7 @@ export function VideoEditor({
                 {displayedText}
               </p>
               <div
-                onPointerDown={(e) => startDrag("resize", e)}
+                onPointerDown={(e) => startDrag("caption", "resize", e)}
                 className="absolute -bottom-2 -right-2 h-5 w-5 cursor-nwse-resize touch-none rounded-full border-2 border-white bg-primary"
                 data-testid="caption-resize"
               />
@@ -394,6 +566,75 @@ export function VideoEditor({
           />
         </div>
 
+        {/* Logo controls */}
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-muted-foreground">
+            Logo (placed at the bottom)
+          </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleLogoFile(e.target.files?.[0])}
+            data-testid="logo-input"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => fileInputRef.current?.click()}
+              data-testid="button-logo-upload"
+            >
+              <ImagePlus className="mr-2 h-4 w-4" />
+              {logo ? "Replace logo" : "Upload logo"}
+            </Button>
+            {logo && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="rounded-xl"
+                onClick={removeLogo}
+                data-testid="button-logo-remove"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Remove
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Render mode */}
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-muted-foreground">
+            Render with
+          </label>
+          <ToggleGroup
+            type="single"
+            value={renderMode}
+            onValueChange={(v) => v && setRenderMode(v as RenderMode)}
+            className="justify-start"
+          >
+            <ToggleGroupItem
+              value="device"
+              className="h-9 gap-2 rounded-lg border px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+              data-testid="mode-device"
+            >
+              <Smartphone className="h-4 w-4" />
+              Device
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="cloud"
+              className="h-9 gap-2 rounded-lg border px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+              data-testid="mode-cloud"
+            >
+              <Cloud className="h-4 w-4" />
+              Cloud (faster)
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <Button
             onClick={handleRender}
@@ -415,9 +656,10 @@ export function VideoEditor({
           </Button>
           <Button
             variant="ghost"
-            onClick={() =>
-              setOverlay((prev) => ({ ...DEFAULT_OVERLAY, text: prev.text }))
-            }
+            onClick={() => {
+              setOverlay((prev) => ({ ...DEFAULT_OVERLAY, text: prev.text }));
+              removeLogo();
+            }}
             className="rounded-xl"
             data-testid="button-reset"
           >
@@ -428,13 +670,22 @@ export function VideoEditor({
 
         {rendering && (
           <div className="space-y-2" data-testid="render-progress">
-            <Progress value={Math.round(renderProgress * 100)} />
+            <Progress
+              value={
+                renderMode === "cloud"
+                  ? undefined
+                  : Math.round(renderProgress * 100)
+              }
+            />
             <p className="text-xs text-muted-foreground">
               {renderStage}
-              {renderProgress > 0
+              {renderMode === "device" && renderProgress > 0
                 ? ` — ${Math.round(renderProgress * 100)}%`
                 : ""}
-              . Rendering happens in your browser and may take a little while.
+              .{" "}
+              {renderMode === "cloud"
+                ? "Rendering on the cloud — this is usually quick."
+                : "Rendering happens in your browser and may take a little while."}
             </p>
           </div>
         )}
@@ -447,7 +698,8 @@ export function VideoEditor({
 
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Download className="h-3.5 w-3.5" />
-          Output is a 9:16 vertical MP4 with your caption burned in.
+          Output is a 9:16 vertical MP4 with your caption{logo ? " and logo" : ""}{" "}
+          burned in.
         </p>
       </div>
     </div>

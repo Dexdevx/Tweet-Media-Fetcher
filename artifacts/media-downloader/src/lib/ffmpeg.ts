@@ -1,6 +1,10 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import { generateOverlayPng, type OverlayState } from "./textOverlay";
+import {
+  generateOverlayPng,
+  type LogoState,
+  type OverlayState,
+} from "./textOverlay";
 
 export const OUTPUT_WIDTH = 720;
 export const OUTPUT_HEIGHT = 1280;
@@ -46,6 +50,7 @@ async function getFFmpeg(
 export interface RenderArgs {
   videoBlob: Blob;
   overlay: OverlayState;
+  logo?: LogoState | null;
   onProgress?: (ratio: number) => void;
   onStage?: (stage: string) => void;
 }
@@ -53,6 +58,7 @@ export interface RenderArgs {
 export async function renderVideoWithOverlay({
   videoBlob,
   overlay,
+  logo,
   onProgress,
   onStage,
 }: RenderArgs): Promise<Blob> {
@@ -72,6 +78,7 @@ export async function renderVideoWithOverlay({
       OUTPUT_WIDTH,
       OUTPUT_HEIGHT,
       overlay,
+      logo,
     );
 
     await ffmpeg.writeFile("input.mp4", await fetchFile(videoBlob));

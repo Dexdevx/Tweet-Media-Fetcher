@@ -20,6 +20,35 @@ export const DEFAULT_OVERLAY: Omit<OverlayState, "text"> = {
   caseMode: "original",
 };
 
+export interface LogoState {
+  dataUrl: string;
+  xFrac: number;
+  yFrac: number;
+  wFrac: number;
+}
+
+export const DEFAULT_LOGO: Omit<LogoState, "dataUrl"> = {
+  xFrac: 0.35,
+  yFrac: 0.85,
+  wFrac: 0.3,
+};
+
+const logoImageCache = new Map<string, HTMLImageElement>();
+
+function loadLogoImage(dataUrl: string): Promise<HTMLImageElement> {
+  const cached = logoImageCache.get(dataUrl);
+  if (cached) return Promise.resolve(cached);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      logoImageCache.set(dataUrl, img);
+      resolve(img);
+    };
+    img.onerror = () => reject(new Error("Failed to load logo image."));
+    img.src = dataUrl;
+  });
+}
+
 export const FONT_STACK =
   '700 {size}px "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
 
@@ -70,17 +99,38 @@ export interface RenderTextOptions {
   width: number;
   height: number;
   overlay: OverlayState;
+  logo?: LogoState | null;
+  logoImage?: HTMLImageElement | null;
+}
+
+function drawLogoToContext(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  logo: LogoState,
+  img: HTMLImageElement,
+): void {
+  const drawW = logo.wFrac * width;
+  const aspect = img.naturalWidth / img.naturalHeight || 1;
+  const drawH = drawW / aspect;
+  const x = logo.xFrac * width;
+  const y = logo.yFrac * height;
+  ctx.drawImage(img, x, y, drawW, drawH);
 }
 
 export function drawOverlayToCanvas(
   canvas: HTMLCanvasElement,
-  { width, height, overlay }: RenderTextOptions,
+  { width, height, overlay, logo, logoImage }: RenderTextOptions,
 ): void {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.clearRect(0, 0, width, height);
+
+  if (logo && logoImage) {
+    drawLogoToContext(ctx, width, height, logo, logoImage);
+  }
 
   const text = transformCase(overlay.text, overlay.caseMode).trim();
   if (!text) return;
@@ -123,6 +173,7 @@ export async function generateOverlayPng(
   width: number,
   height: number,
   overlay: OverlayState,
+  logo?: LogoState | null,
 ): Promise<Uint8Array> {
   if (typeof document !== "undefined" && "fonts" in document) {
     try {
@@ -131,8 +182,16 @@ export async function generateOverlayPng(
       // ignore font loading issues
     }
   }
+  let logoImage: HTMLImageElement | null = null;
+  if (logo?.dataUrl) {
+    try {
+      logoImage = await loadLogoImage(logo.dataUrl);
+    } catch {
+      // ignore logo loading issues; render without it
+    }
+  }
   const canvas = document.createElement("canvas");
-  drawOverlayToCanvas(canvas, { width, height, overlay });
+  drawOverlayToCanvas(canvas, { width, height, overlay, logo, logoImage });
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob((b) => resolve(b), "image/png"),
   );

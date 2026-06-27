@@ -39,3 +39,31 @@ export const ExtractMediaResponse = zod.object({
 })
 
 
+/**
+ * Renders the selected video into a 9:16 vertical MP4 with the caption text and optional logo burned in, using Cloudinary's CDN. Returns a temporary download URL; the uploaded assets are deleted after a few minutes.
+ * @summary Render a captioned 9:16 video on Cloudinary
+ */
+export const RenderCloudinaryBody = zod.object({
+  "videoUrl": zod.string(),
+  "overlay": zod.object({
+  "text": zod.string(),
+  "xFrac": zod.number(),
+  "yFrac": zod.number(),
+  "wFrac": zod.number(),
+  "fontFrac": zod.number(),
+  "align": zod.enum(['left', 'center', 'right'])
+}),
+  "logo": zod.union([zod.object({
+  "dataUrl": zod.string().describe('Base64 data URL of the uploaded logo image.'),
+  "xFrac": zod.number(),
+  "yFrac": zod.number(),
+  "wFrac": zod.number()
+}),zod.null()]).optional()
+})
+
+export const RenderCloudinaryResponse = zod.object({
+  "downloadUrl": zod.string(),
+  "expiresInSeconds": zod.number()
+})
+
+

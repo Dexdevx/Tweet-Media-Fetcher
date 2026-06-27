@@ -28,6 +28,43 @@ export interface ExtractResult {
   images: string[];
 }
 
+export type CaptionOverlayAlign = typeof CaptionOverlayAlign[keyof typeof CaptionOverlayAlign];
+
+
+export const CaptionOverlayAlign = {
+  left: 'left',
+  center: 'center',
+  right: 'right',
+} as const;
+
+export interface CaptionOverlay {
+  text: string;
+  xFrac: number;
+  yFrac: number;
+  wFrac: number;
+  fontFrac: number;
+  align: CaptionOverlayAlign;
+}
+
+export interface LogoOverlay {
+  /** Base64 data URL of the uploaded logo image. */
+  dataUrl: string;
+  xFrac: number;
+  yFrac: number;
+  wFrac: number;
+}
+
+export interface RenderCloudinaryRequest {
+  videoUrl: string;
+  overlay: CaptionOverlay;
+  logo?: LogoOverlay | null;
+}
+
+export interface RenderCloudinaryResult {
+  downloadUrl: string;
+  expiresInSeconds: number;
+}
+
 export interface ErrorResponse {
   error: string;
 }

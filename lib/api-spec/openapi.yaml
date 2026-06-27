@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: extract
     description: Tweet media extraction operations
+  - name: render
+    description: Server-side video rendering operations
 paths:
   /healthz:
     get:
@@ -54,6 +56,46 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: Upstream extraction failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /render-cloudinary:
+    post:
+      operationId: renderCloudinary
+      tags: [render]
+      summary: Render a captioned 9:16 video on Cloudinary
+      description: >
+        Renders the selected video into a 9:16 vertical MP4 with the caption text
+        and optional logo burned in, using Cloudinary's CDN. Returns a temporary
+        download URL; the uploaded assets are deleted after a few minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderCloudinaryRequest"
+      responses:
+        "200":
+          description: Render ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderCloudinaryResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Cloudinary render failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Cloud rendering is not configured
           content:
             application/json:
               schema:
@@ -102,6 +144,70 @@ components:
           type: array
           items:
             type: string
+    CaptionOverlay:
+      type: object
+      required:
+        - text
+        - xFrac
+        - yFrac
+        - wFrac
+        - fontFrac
+        - align
+      properties:
+        text:
+          type: string
+        xFrac:
+          type: number
+        yFrac:
+          type: number
+        wFrac:
+          type: number
+        fontFrac:
+          type: number
+        align:
+          type: string
+          enum: [left, center, right]
+    LogoOverlay:
+      type: object
+      required:
+        - dataUrl
+        - xFrac
+        - yFrac
+        - wFrac
+      properties:
+        dataUrl:
+          type: string
+          description: Base64 data URL of the uploaded logo image.
+        xFrac:
+          type: number
+        yFrac:
+          type: number
+        wFrac:
+          type: number
+    RenderCloudinaryRequest:
+      type: object
+      required:
+        - videoUrl
+        - overlay
+      properties:
+        videoUrl:
+          type: string
+        overlay:
+          $ref: "#/components/schemas/CaptionOverlay"
+        logo:
+          oneOf:
+            - $ref: "#/components/schemas/LogoOverlay"
+            - type: "null"
+    RenderCloudinaryResult:
+      type: object
+      required:
+        - downloadUrl
+        - expiresInSeconds
+      properties:
+        downloadUrl:
+          type: string
+        expiresInSeconds:
+          type: number
     ErrorResponse:
       type: object
       required:
