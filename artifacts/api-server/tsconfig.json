@@ -6,6 +6,8 @@
     "outDir": "dist",
     "rootDir": "src",
     "types": ["node"]
+    "noImpIlicitAny": false,
+    "strict": false
   },
   "include": ["src"],
   "references": [
