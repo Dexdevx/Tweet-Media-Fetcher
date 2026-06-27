@@ -1,2 +1,3 @@
 - [Radix Dialog Escape interception](radix-dialog-escape.md) — a child can't cancel Dialog's Escape-close via React stopPropagation; gate DialogContent's onEscapeKeyDown with a ref.
 - [FFmpeg.wasm in Vite](ffmpeg-wasm-vite.md) — 0.12.x module worker needs the ESM core (not UMD); also Vite optimizeDeps.exclude + single-threaded core for coi=false.
+- [Cloudinary CLOUDINARY_URL boot crash](cloudinary-env-crash.md) — SDK parses the env var at import time and crashes the server on a bad value; import lazily + sanitize (strip `CLOUDINARY_URL=`, quotes, `<>`).

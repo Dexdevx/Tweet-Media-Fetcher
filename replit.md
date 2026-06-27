@@ -29,6 +29,9 @@ Paste an X/Twitter post URL and instantly get downloadable video qualities and i
 ## Architecture decisions
 
 - The `/api/extract` endpoint proxies the public `tweeterdownloader.com` extraction API server-side to avoid browser CORS and to normalize/validate the response.
+- Video captioning supports two render paths: **device** (FFmpeg.wasm, 720x1280, in-browser) and **cloud** (`POST /api/render-cloudinary`, 1080x1920 max quality). A toggle in the editor picks between them.
+- Cloudinary assets are temporary: each render schedules a `destroy()` after 5 min, plus a periodic sweep deletes anything left in the `xmd_tmp` folder past TTL (free plan = limited credits). The Cloudinary SDK is imported lazily + the `CLOUDINARY_URL` value is sanitized — see `.agents/memory/cloudinary-env-crash.md`.
+- A logo can be uploaded from the device and dragged/resized at the video bottom (caption stays top); it is burned into BOTH render paths (drawn into the overlay PNG locally, overlaid via transformation on Cloudinary).
 - Input is restricted to X/Twitter post URLs (host allowlist + `/status/{id}` path check); malformed or non-tweet URLs return 400.
 - Upstream JSON is strictly validated; unexpected shapes or empty media return 502 rather than a misleading 200.
 - Outbound fetch has a 20s timeout via AbortController.
