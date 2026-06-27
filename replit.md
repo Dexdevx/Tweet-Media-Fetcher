@@ -36,6 +36,11 @@ Paste an X/Twitter post URL and instantly get downloadable video qualities and i
 ## Product
 
 - Single-purpose tool: paste an X/Twitter post link, extract downloadable media. Shows post title, thumbnail, duration, and one download link per video quality plus any images.
+- Clicking a video quality opens an in-app player (Radix Dialog) that plays the video and overlays the tweet text. The overlay is draggable, double-click-to-edit (textarea), resizable via a bottom-right handle, and has alignment + full-width controls. Defaults to full-width, centered, near the top. Download and quality-switch controls live in the player header.
+
+## Gotchas
+
+- Overlay edit mode uses Escape to exit; Radix Dialog also closes on Escape. The overlay reports its editing state up via a ref so `DialogContent.onEscapeKeyDown` can `preventDefault()` while editing. See `.agents/memory/radix-dialog-escape.md`.
 
 ## User preferences
 

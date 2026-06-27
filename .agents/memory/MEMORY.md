@@ -1,0 +1,1 @@
+- [Radix Dialog Escape interception](radix-dialog-escape.md) — a child can't cancel Dialog's Escape-close via React stopPropagation; gate DialogContent's onEscapeKeyDown with a ref.

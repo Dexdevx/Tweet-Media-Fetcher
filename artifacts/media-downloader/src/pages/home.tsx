@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Download, AlertCircle, Image as ImageIcon, Video, Clock, ArrowRight, Loader2, PlayCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { VideoPlayerOverlay } from "@/components/VideoPlayerOverlay";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -16,6 +17,8 @@ function formatDuration(seconds: number): string {
 export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [submittedUrl, setSubmittedUrl] = useState("");
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const [selectedVideoUrl, setSelectedVideoUrl] = useState("");
 
   const { data, isLoading, isError, error, isFetching } = useExtractMedia(
     { url: submittedUrl },
@@ -184,14 +187,15 @@ export default function Home() {
                             <Button
                               key={idx}
                               variant={idx === 0 ? "default" : "secondary"}
-                              asChild
                               className="rounded-xl font-semibold"
                               data-testid={`link-download-video-${idx}`}
+                              onClick={() => {
+                                setSelectedVideoUrl(media.url);
+                                setPlayerOpen(true);
+                              }}
                             >
-                              <a href={media.url} target="_blank" rel="noopener noreferrer" download>
-                                <Download className="w-4 h-4 mr-2" />
-                                {media.quality ? `${media.quality} ${media.type.toUpperCase()}` : media.type.toUpperCase()}
-                              </a>
+                              <PlayCircle className="w-4 h-4 mr-2" />
+                              {media.quality ? `${media.quality} ${media.type.toUpperCase()}` : media.type.toUpperCase()}
                             </Button>
                           ))}
                         </div>
@@ -230,6 +234,17 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {data && (
+        <VideoPlayerOverlay
+          isOpen={playerOpen}
+          onClose={() => setPlayerOpen(false)}
+          title={data.title || ""}
+          selectedUrl={selectedVideoUrl}
+          mediaOptions={sortedVideos}
+          onSelectQuality={(url) => setSelectedVideoUrl(url)}
+        />
+      )}
     </div>
   );
 }
