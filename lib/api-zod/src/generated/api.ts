@@ -45,20 +45,7 @@ export const ExtractMediaResponse = zod.object({
  */
 export const RenderCloudinaryBody = zod.object({
   "videoUrl": zod.string(),
-  "overlay": zod.object({
-  "text": zod.string(),
-  "xFrac": zod.number(),
-  "yFrac": zod.number(),
-  "wFrac": zod.number(),
-  "fontFrac": zod.number(),
-  "align": zod.enum(['left', 'center', 'right'])
-}),
-  "logo": zod.union([zod.object({
-  "dataUrl": zod.string().describe('Base64 data URL of the uploaded logo image.'),
-  "xFrac": zod.number(),
-  "yFrac": zod.number(),
-  "wFrac": zod.number()
-}),zod.null()]).optional()
+  "overlayDataUrl": zod.string().describe('Base64 PNG data URL of the full-frame (9:16) overlay rendered in the browser — caption text and any logo already composited with transparency. Burned onto the padded video by Cloudinary as-is.\n')
 })
 
 export const RenderCloudinaryResponse = zod.object({

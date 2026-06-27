@@ -5,11 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { CaptionOverlay } from './captionOverlay';
-import type { LogoOverlay } from './logoOverlay';
 
 export interface RenderCloudinaryRequest {
   videoUrl: string;
-  overlay: CaptionOverlay;
-  logo?: LogoOverlay | null;
+  /** Base64 PNG data URL of the full-frame (9:16) overlay rendered in the browser — caption text and any logo already composited with transparency. Burned onto the padded video by Cloudinary as-is. */
+  overlayDataUrl: string;
 }

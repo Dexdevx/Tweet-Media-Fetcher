@@ -169,12 +169,12 @@ export function drawOverlayToCanvas(
   });
 }
 
-export async function generateOverlayPng(
+async function renderOverlayCanvas(
   width: number,
   height: number,
   overlay: OverlayState,
   logo?: LogoState | null,
-): Promise<Uint8Array> {
+): Promise<HTMLCanvasElement> {
   if (typeof document !== "undefined" && "fonts" in document) {
     try {
       await (document as Document).fonts.ready;
@@ -192,9 +192,29 @@ export async function generateOverlayPng(
   }
   const canvas = document.createElement("canvas");
   drawOverlayToCanvas(canvas, { width, height, overlay, logo, logoImage });
+  return canvas;
+}
+
+export async function generateOverlayPng(
+  width: number,
+  height: number,
+  overlay: OverlayState,
+  logo?: LogoState | null,
+): Promise<Uint8Array> {
+  const canvas = await renderOverlayCanvas(width, height, overlay, logo);
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob((b) => resolve(b), "image/png"),
   );
   if (!blob) throw new Error("Failed to generate text overlay image.");
   return new Uint8Array(await blob.arrayBuffer());
+}
+
+export async function generateOverlayDataUrl(
+  width: number,
+  height: number,
+  overlay: OverlayState,
+  logo?: LogoState | null,
+): Promise<string> {
+  const canvas = await renderOverlayCanvas(width, height, overlay, logo);
+  return canvas.toDataURL("image/png");
 }

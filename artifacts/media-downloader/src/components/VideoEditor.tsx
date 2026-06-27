@@ -22,6 +22,7 @@ import {
   DEFAULT_OVERLAY,
   DEFAULT_LOGO,
   transformCase,
+  generateOverlayDataUrl,
   type Align,
   type CaseMode,
   type LogoState,
@@ -44,6 +45,11 @@ interface VideoEditorProps {
 
 type RenderMode = "device" | "cloud";
 type DragTarget = "caption" | "logo";
+
+// Cloud render output frame (9:16, max quality). The browser renders the
+// overlay PNG at this exact size so Cloudinary can lay it over the padded video.
+const CLOUD_OUTPUT_WIDTH = 1080;
+const CLOUD_OUTPUT_HEIGHT = 1920;
 
 function proxyUrl(rawUrl: string): string {
   return `/api/proxy-media?url=${encodeURIComponent(rawUrl)}`;
@@ -305,26 +311,20 @@ export function VideoEditor({
     setRenderProgress(0);
     setRenderStage("Uploading to cloud");
     try {
-      const cap = captionPayload();
+      // Render the overlay (caption + logo) in the browser at the cloud output
+      // size and send it as a single PNG. Cloudinary lays it over the video, so
+      // the result matches the preview exactly and avoids text-layer encoding
+      // limits (emoji, curly quotes, etc.).
+      const overlayDataUrl = await generateOverlayDataUrl(
+        CLOUD_OUTPUT_WIDTH,
+        CLOUD_OUTPUT_HEIGHT,
+        captionPayload(),
+        logo,
+      );
       const result = await cloudRender.mutateAsync({
         data: {
           videoUrl: selectedUrl,
-          overlay: {
-            text: cap.text,
-            xFrac: cap.xFrac,
-            yFrac: cap.yFrac,
-            wFrac: cap.wFrac,
-            fontFrac: cap.fontFrac,
-            align: cap.align,
-          },
-          logo: logo
-            ? {
-                dataUrl: logo.dataUrl,
-                xFrac: logo.xFrac,
-                yFrac: logo.yFrac,
-                wFrac: logo.wFrac,
-              }
-            : null,
+          overlayDataUrl,
         },
       });
       setRenderStage("Done");

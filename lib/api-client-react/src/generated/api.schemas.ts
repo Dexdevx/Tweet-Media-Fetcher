@@ -28,36 +28,10 @@ export interface ExtractResult {
   images: string[];
 }
 
-export type CaptionOverlayAlign = typeof CaptionOverlayAlign[keyof typeof CaptionOverlayAlign];
-
-
-export const CaptionOverlayAlign = {
-  left: 'left',
-  center: 'center',
-  right: 'right',
-} as const;
-
-export interface CaptionOverlay {
-  text: string;
-  xFrac: number;
-  yFrac: number;
-  wFrac: number;
-  fontFrac: number;
-  align: CaptionOverlayAlign;
-}
-
-export interface LogoOverlay {
-  /** Base64 data URL of the uploaded logo image. */
-  dataUrl: string;
-  xFrac: number;
-  yFrac: number;
-  wFrac: number;
-}
-
 export interface RenderCloudinaryRequest {
   videoUrl: string;
-  overlay: CaptionOverlay;
-  logo?: LogoOverlay | null;
+  /** Base64 PNG data URL of the full-frame (9:16) overlay rendered in the browser — caption text and any logo already composited with transparency. Burned onto the padded video by Cloudinary as-is. */
+  overlayDataUrl: string;
 }
 
 export interface RenderCloudinaryResult {

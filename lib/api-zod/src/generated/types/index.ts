@@ -6,13 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export * from './captionOverlay';
-export * from './captionOverlayAlign';
 export * from './errorResponse';
 export * from './extractMediaParams';
 export * from './extractResult';
 export * from './healthStatus';
-export * from './logoOverlay';
 export * from './mediaItem';
 export * from './renderCloudinaryRequest';
 export * from './renderCloudinaryResult';

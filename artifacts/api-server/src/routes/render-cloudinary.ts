@@ -30,9 +30,25 @@ function normalizedCloudinaryUrl(): string | null {
   return raw.startsWith("cloudinary://") ? raw : null;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(Math.max(value, min), max);
+// Validate and decode the browser-rendered overlay: must be a base64 PNG data
+// URL, with a real PNG signature and within a sane size bound. Returns the
+// decoded bytes (so a malformed payload is rejected here, not at Cloudinary).
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+const MAX_OVERLAY_BYTES = 8 * 1024 * 1024;
+function decodePngDataUrl(value: string): Buffer | null {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(value);
+  if (!match) return null;
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(match[1] ?? "", "base64");
+  } catch {
+    return null;
+  }
+  if (bytes.length < 8 || bytes.length > MAX_OVERLAY_BYTES) return null;
+  if (!bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return null;
+  return bytes;
 }
 
 // Safety net for the per-request deletion timer: if the server restarts before a
@@ -47,26 +63,36 @@ function startCleanupSweep(cloudinary: CloudinaryApi): void {
     const cutoff = Date.now() - DELETE_AFTER_MS;
     for (const resourceType of ["video", "image"] as const) {
       try {
-        const res = (await cloudinary.api.resources({
-          type: "upload",
-          prefix: `${UPLOAD_FOLDER}/`,
-          resource_type: resourceType,
-          max_results: 100,
-        })) as { resources?: { public_id: string; created_at: string }[] };
-        for (const r of res.resources ?? []) {
-          if (new Date(r.created_at).getTime() >= cutoff) continue;
-          await cloudinary.uploader
-            .destroy(r.public_id, {
-              resource_type: resourceType,
-              invalidate: true,
-            })
-            .catch((err: unknown) =>
-              logger.warn(
-                { err, publicId: r.public_id },
-                "Cleanup sweep failed to delete asset",
-              ),
-            );
-        }
+        // Page through all matching assets so a backlog larger than one page
+        // still gets fully swept.
+        let nextCursor: string | undefined;
+        do {
+          const res = (await cloudinary.api.resources({
+            type: "upload",
+            prefix: `${UPLOAD_FOLDER}/`,
+            resource_type: resourceType,
+            max_results: 100,
+            next_cursor: nextCursor,
+          })) as {
+            resources?: { public_id: string; created_at: string }[];
+            next_cursor?: string;
+          };
+          for (const r of res.resources ?? []) {
+            if (new Date(r.created_at).getTime() >= cutoff) continue;
+            await cloudinary.uploader
+              .destroy(r.public_id, {
+                resource_type: resourceType,
+                invalidate: true,
+              })
+              .catch((err: unknown) =>
+                logger.warn(
+                  { err, publicId: r.public_id },
+                  "Cleanup sweep failed to delete asset",
+                ),
+              );
+          }
+          nextCursor = res.next_cursor;
+        } while (nextCursor);
       } catch (err) {
         logger.warn({ err, resourceType }, "Cloudinary cleanup sweep failed");
       }
@@ -116,7 +142,7 @@ router.post("/render-cloudinary", async (req, res) => {
     return;
   }
 
-  const { videoUrl, overlay, logo } = parsed.data;
+  const { videoUrl, overlayDataUrl } = parsed.data;
 
   const validatedVideo = validateMediaUrl(videoUrl);
   if (!validatedVideo.ok || !validatedVideo.url) {
@@ -126,19 +152,26 @@ router.post("/render-cloudinary", async (req, res) => {
     return;
   }
 
+  if (!decodePngDataUrl(overlayDataUrl)) {
+    res.status(400).json({ error: "Invalid overlay image." });
+    return;
+  }
+
   let videoPublicId: string | null = null;
-  let logoPublicId: string | null = null;
+  let overlayPublicId: string | null = null;
 
   try {
-    // Upload the logo first (if any) so the transformation can reference it.
-    if (logo?.dataUrl) {
-      const logoUpload = await cloudinary.uploader.upload(logo.dataUrl, {
-        resource_type: "image",
-        folder: UPLOAD_FOLDER,
-        timeout: 60000,
-      });
-      logoPublicId = logoUpload.public_id;
-    }
+    // Upload the browser-rendered overlay PNG first so the transformation can
+    // reference it. It already contains the caption + logo composited at the
+    // exact 9:16 frame size, so Cloudinary just lays it over the padded video —
+    // this guarantees parity with the on-device preview and sidesteps
+    // Cloudinary text-layer encoding/font limits (e.g. emoji, curly quotes).
+    const overlayUpload = await cloudinary.uploader.upload(overlayDataUrl, {
+      resource_type: "image",
+      folder: UPLOAD_FOLDER,
+      timeout: 60000,
+    });
+    overlayPublicId = overlayUpload.public_id;
 
     const videoUpload = await cloudinary.uploader.upload(
       validatedVideo.url.toString(),
@@ -150,8 +183,7 @@ router.post("/render-cloudinary", async (req, res) => {
     );
     videoPublicId = videoUpload.public_id;
 
-    // Build the 9:16 transformation: pad to a black vertical frame, then burn
-    // in the caption (top, via north_west + fractional offsets) and the logo.
+    // Pad the video to a black vertical frame, then overlay the full-frame PNG.
     const transformation: Record<string, unknown>[] = [
       {
         width: OUTPUT_WIDTH,
@@ -159,42 +191,18 @@ router.post("/render-cloudinary", async (req, res) => {
         crop: "pad",
         background: "black",
       },
+      {
+        overlay: { public_id: overlayPublicId },
+        width: OUTPUT_WIDTH,
+        height: OUTPUT_HEIGHT,
+        crop: "fit",
+        flags: "layer_apply",
+        gravity: "north_west",
+        x: 0,
+        y: 0,
+      },
+      { quality: "auto:best" },
     ];
-
-    const caption = overlay.text.replace(/\s*\n\s*/g, " ").trim();
-    if (caption) {
-      transformation.push({
-        overlay: {
-          font_family: "Arial",
-          font_size: Math.round(
-            clamp(overlay.fontFrac, 0.01, 0.3) * OUTPUT_HEIGHT,
-          ),
-          font_weight: "bold",
-          text_align: overlay.align,
-          text: caption,
-        },
-        color: "white",
-        width: Math.round(clamp(overlay.wFrac, 0.05, 1) * OUTPUT_WIDTH),
-        crop: "fit",
-        gravity: "north_west",
-        x: Math.round(clamp(overlay.xFrac, 0, 1) * OUTPUT_WIDTH),
-        y: Math.round(clamp(overlay.yFrac, 0, 1) * OUTPUT_HEIGHT),
-        effect: "outline:2:black",
-      });
-    }
-
-    if (logoPublicId) {
-      transformation.push({
-        overlay: { public_id: logoPublicId },
-        width: Math.round(clamp(logo?.wFrac ?? 0.3, 0.05, 1) * OUTPUT_WIDTH),
-        crop: "fit",
-        gravity: "north_west",
-        x: Math.round(clamp(logo?.xFrac ?? 0.35, 0, 1) * OUTPUT_WIDTH),
-        y: Math.round(clamp(logo?.yFrac ?? 0.85, 0, 1) * OUTPUT_HEIGHT),
-      });
-    }
-
-    transformation.push({ quality: "auto:best" });
 
     const downloadUrl = cloudinary.url(videoPublicId, {
       resource_type: "video",
@@ -206,7 +214,7 @@ router.post("/render-cloudinary", async (req, res) => {
 
     // Free up Cloudinary storage/credits shortly after delivery. A server
     // restart drops the timer, which is acceptable for these temporary assets.
-    const idsToDelete = { video: videoPublicId, logo: logoPublicId };
+    const idsToDelete = { video: videoPublicId, overlay: overlayPublicId };
     setTimeout(() => {
       void cloudinary.uploader
         .destroy(idsToDelete.video, {
@@ -216,16 +224,14 @@ router.post("/render-cloudinary", async (req, res) => {
         .catch((err: unknown) =>
           logger.warn({ err }, "Failed to delete Cloudinary video"),
         );
-      if (idsToDelete.logo) {
-        void cloudinary.uploader
-          .destroy(idsToDelete.logo, {
-            resource_type: "image",
-            invalidate: true,
-          })
-          .catch((err: unknown) =>
-            logger.warn({ err }, "Failed to delete Cloudinary logo"),
-          );
-      }
+      void cloudinary.uploader
+        .destroy(idsToDelete.overlay, {
+          resource_type: "image",
+          invalidate: true,
+        })
+        .catch((err: unknown) =>
+          logger.warn({ err }, "Failed to delete Cloudinary overlay"),
+        );
     }, DELETE_AFTER_MS);
 
     res.json({ downloadUrl, expiresInSeconds: DELETE_AFTER_MS / 1000 });
@@ -237,9 +243,9 @@ router.post("/render-cloudinary", async (req, res) => {
         .destroy(videoPublicId, { resource_type: "video" })
         .catch(() => {});
     }
-    if (logoPublicId) {
+    if (overlayPublicId) {
       void cloudinary.uploader
-        .destroy(logoPublicId, { resource_type: "image" })
+        .destroy(overlayPublicId, { resource_type: "image" })
         .catch(() => {});
     }
     res.status(502).json({
